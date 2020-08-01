@@ -173,8 +173,6 @@ module Torb
       end
 
       def render_report_csv(reports)
-        reports = reports.sort_by { |report| report[:sold_at] }
-
         keys = %i[reservation_id event_id rank num price user_id sold_at canceled_at]
         body = keys.join(',')
         body << "\n"
@@ -403,14 +401,10 @@ module Torb
 
       db.query('BEGIN')
       begin
-        reservation = db.xquery('SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled = 0 GROUP BY event_id HAVING reserved_at = MIN(reserved_at) FOR UPDATE', event['id'], sheet['id']).first
+        reservation = db.xquery('SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? and user_id = ? AND canceled = 0', event['id'], sheet['id'], user['id']).first
         unless reservation
           db.query('ROLLBACK')
           halt_with_error 400, 'not_reserved'
-        end
-        if reservation['user_id'] != user['id']
-          db.query('ROLLBACK')
-          halt_with_error 403, 'not_permitted'
         end
         timestamp = Time.now.utc.strftime('%F %T.%6N')
         db.xquery('UPDATE reservations SET canceled_at = ?, updated_at = ?, canceled = 1 WHERE id = ?', timestamp, timestamp, reservation['id'])
@@ -510,7 +504,7 @@ module Torb
     get '/admin/api/reports/events/:id/sales', admin_login_required: true do |event_id|
       event = get_event(event_id)
 
-      reservations = db.xquery('SELECT r.*, s.rank AS sheet_rank, s.num AS sheet_num, s.price AS sheet_price, e.price AS event_price FROM reservations r INNER JOIN sheets s ON s.id = r.sheet_id INNER JOIN events e ON e.id = r.event_id WHERE r.event_id = ? ORDER BY reserved_at ASC FOR UPDATE', event['id'])
+      reservations = db.xquery('SELECT r.*, s.rank AS sheet_rank, s.num AS sheet_num, s.price AS sheet_price, e.price AS event_price FROM reservations r INNER JOIN sheets s ON s.id = r.sheet_id INNER JOIN events e ON e.id = r.event_id WHERE r.event_id = ? ORDER BY reserved_at ASC', event['id'])
       reports = reservations.map do |reservation|
         {
           reservation_id: reservation['id'],
@@ -528,7 +522,7 @@ module Torb
     end
 
     get '/admin/api/reports/sales', admin_login_required: true do
-      reservations = db.query('SELECT r.*, s.rank AS sheet_rank, s.num AS sheet_num, s.price AS sheet_price, e.id AS event_id, e.price AS event_price FROM reservations r INNER JOIN sheets s ON s.id = r.sheet_id INNER JOIN events e ON e.id = r.event_id ORDER BY reserved_at ASC FOR UPDATE')
+      reservations = db.query('SELECT r.*, s.rank AS sheet_rank, s.num AS sheet_num, s.price AS sheet_price, e.id AS event_id, e.price AS event_price FROM reservations r INNER JOIN sheets s ON s.id = r.sheet_id INNER JOIN events e ON e.id = r.event_id ORDER BY reserved_at ASC')
       reports = reservations.map do |reservation|
         {
           reservation_id: reservation['id'],

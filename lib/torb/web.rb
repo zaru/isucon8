@@ -130,6 +130,7 @@ module Torb
       def get_events_for_top
         events = db.xquery(<<~QUERY)
           SELECT
+          events.id id,
           events.title event_title,
           events.price + 5000 as s_price,
           events.price + 3000 as a_price,
@@ -204,7 +205,7 @@ module Torb
 
     get '/' do
       @user   = get_login_user
-      @events = get_events.map(&method(:sanitize_event))
+      @events = get_events_for_top
       erb :index
     end
 

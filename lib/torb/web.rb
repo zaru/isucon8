@@ -142,8 +142,7 @@ module Torb
         event
       end
 
-      def sanitize_event(event)
-        sanitized = event.dup  # shallow clone
+      def sanitize_event(sanitized)
         sanitized.delete('price')
         sanitized.delete('public')
         sanitized.delete('closed')

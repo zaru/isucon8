@@ -6,6 +6,8 @@ require 'mysql2-cs-bind'
 require 'rack-mini-profiler'
 
 module Torb
+  SHEET_CAPACITY = 1000
+
   class Web < Sinatra::Base
     configure :development do
       require 'sinatra/reloader'

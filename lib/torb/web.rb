@@ -95,7 +95,7 @@ module Torb
         r = db.xquery('select user_id, reserved_at, sheet_id from reservations where event_id = 1 and canceled_at is null')
         sheet_list = {}
         r.each do |v|
-          sheet_list[v["sheet_id"]] = {user_id: v["user_id"], reserved_at: v["reserved_at"]}
+          sheet_list[v["sheet_id"]] = { 'user_id' => v["user_id"], 'reserved_at' => v["reserved_at"] }
         end
 
         sheets.each do |sheet|

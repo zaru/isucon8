@@ -3,12 +3,15 @@ require 'sinatra/base'
 require 'erubi'
 require 'mysql2'
 require 'mysql2-cs-bind'
+require 'rack-mini-profiler'
 
 module Torb
   class Web < Sinatra::Base
     configure :development do
       require 'sinatra/reloader'
       register Sinatra::Reloader
+
+      use Rack::MiniProfiler
     end
 
     set :root, File.expand_path('../..', __dir__)

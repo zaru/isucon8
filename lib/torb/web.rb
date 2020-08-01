@@ -255,7 +255,6 @@ module Torb
 
       session['user_id'] = user['id']
 
-      user = get_login_user
       user.to_json
     end
 

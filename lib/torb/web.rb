@@ -183,7 +183,7 @@ module Torb
           events.price + 1000 as b_price,
           events.price +    0 as c_price,
           (select count(*) from  reservations
-            where canceled_at is null = 1
+            where canceled_at is null
               and events.id = reservations.event_id
           ) as reserved_count
           from events

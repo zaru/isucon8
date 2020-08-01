@@ -94,6 +94,7 @@ const API = (() => {
       },
     },
     Event: {
+      // 呼んでない？
       getAll () {
         return fetch('/api/events', {
           method: 'GET',

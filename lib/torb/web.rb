@@ -89,20 +89,10 @@ module Torb
           event['sheets'][rank] = { 'total' => 0, 'remains' => 0, 'detail' => [] }
         end
 
-        # sheet_list
-        r = db.xquery('select user_id, reserved_at, sheet_id from reservations where event_id = ? and canceled = 0', event_id)
-        sheet_list = {}
-        r.each do |v|
-          sheet_list[v["sheet_id"]] = { 'user_id' => v["user_id"], 'reserved_at' => v["reserved_at"] }
-        end
-
         sheets = db.query('SELECT * FROM sheets ORDER BY `rank`, num')
         sheets.each do |sheet|
           event['sheets'][sheet['rank']]['price'] ||= event['price'] + sheet['price']
           event['sheets'][sheet['rank']]['total'] += 1
-
-          sheet_id = sheet["id"]
-          reservation = sheet_list[sheet_id]
 
           reservation = db.xquery('SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled = 0 limit 1', event['id'], sheet['id']).first
           if reservation

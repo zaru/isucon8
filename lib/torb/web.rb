@@ -92,7 +92,7 @@ module Torb
         sheets = db.query('SELECT * FROM sheets ORDER BY `rank`, num')
 
         # sheet_list
-        r = db.xquery('select user_id, reserved_at, sheet_id from reservations where event_id = 1 and canceled = 0')
+        r = db.xquery('select user_id, reserved_at, sheet_id from reservations where event_id = ? and canceled = 0', event_id)
         sheet_list = {}
         r.each do |v|
           sheet_list[v["sheet_id"]] = { 'user_id' => v["user_id"], 'reserved_at' => v["reserved_at"] }

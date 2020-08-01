@@ -230,6 +230,17 @@ module Torb
       { id: user_id, nickname: nickname }.to_json
     end
 
+
+    def get_event_for_user_detail(event_id)
+      event = db.xquery('SELECT * FROM events WHERE id = ?', event_id).first
+      return unless event
+
+      event['public'] = event.delete('public_fg')
+      event['closed'] = event.delete('closed_fg')
+
+      event
+    end
+
     get '/api/users/:id', login_required: true do |user_id|
       user = db.xquery('SELECT id, nickname FROM users WHERE id = ?', user_id).first
       if user['id'] != get_login_user['id']
@@ -238,11 +249,18 @@ module Torb
 
       rows = db.xquery('SELECT r.*, s.rank AS sheet_rank, s.num AS sheet_num FROM reservations r INNER JOIN sheets s ON s.id = r.sheet_id WHERE r.user_id = ? ORDER BY r.updated_at DESC LIMIT 5', user['id'])
       recent_reservations = rows.map do |row|
-        event = get_event(row['event_id'])
-        price = event['sheets'][row['sheet_rank']]['price']
-        event.delete('sheets')
-        event.delete('total')
-        event.delete('remains')
+        event = get_event_for_user_detail(row['event_id'])
+        sheet_price = case row['sheet_rank']
+                      when 'S' then
+                        5000
+                      when 'A' then
+                        3000
+                      when 'B' then
+                        1000
+                      when 'C' then
+                        0
+                      end
+        price = event['price'] + sheet_price
 
         {
           id:          row['id'],

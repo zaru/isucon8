@@ -7,4 +7,4 @@ export DB_PORT=3306
 export DB_USER=isucon
 export DB_PASS=isucon
 
-exec puma -p 8080 -v
+exec puma -v -C puma_config.rb

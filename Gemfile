@@ -8,4 +8,9 @@ gem 'mysql2-cs-bind'
 
 group :development do
   gem 'sinatra-contrib'
+
+  gem 'rack-mini-profiler'
+  gem 'memory_profiler'
+  gem 'flamegraph'
+  gem 'stackprof'
 end

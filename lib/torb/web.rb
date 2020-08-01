@@ -239,16 +239,28 @@ module Torb
             total: Torb::SHEET_CAPACITY,
             remains: Torb::SHEET_CAPACITY,
             sheets: {
-              'S' => { 'total' => Torb::SHEET_S, 'remains' => Torb::SHEET_S, 'price' => event['price'] + Torb::BASE_PRICE_FOR_SHEET['S'] },
-              'A' => { 'total' => Torb::SHEET_A, 'remains' => Torb::SHEET_A, 'price' => event['price'] + Torb::BASE_PRICE_FOR_SHEET['A'] },
-              'B' => { 'total' => Torb::SHEET_B, 'remains' => Torb::SHEET_B, 'price' => event['price'] + Torb::BASE_PRICE_FOR_SHEET['B'] },
-              'C' => { 'total' => Torb::SHEET_C, 'remains' => Torb::SHEET_C, 'price' => event['price'] + Torb::BASE_PRICE_FOR_SHEET['C'] }
+              'S' => { 'total' => Torb::SHEET_S, 'remains' => Torb::SHEET_S, 'detail' => [], 'price' => event['price'] + Torb::BASE_PRICE_FOR_SHEET['S'] },
+              'A' => { 'total' => Torb::SHEET_A, 'remains' => Torb::SHEET_A, 'detail' => [], 'price' => event['price'] + Torb::BASE_PRICE_FOR_SHEET['A'] },
+              'B' => { 'total' => Torb::SHEET_B, 'remains' => Torb::SHEET_B, 'detail' => [], 'price' => event['price'] + Torb::BASE_PRICE_FOR_SHEET['B'] },
+              'C' => { 'total' => Torb::SHEET_C, 'remains' => Torb::SHEET_C, 'detail' => [], 'price' => event['price'] + Torb::BASE_PRICE_FOR_SHEET['C'] }
             }
           })
 
           reserved_count = event['reserved_count'].to_i
           evt[:remains] -= reserved_count
           evt[:sheets][rank]['remains'] -= reserved_count
+
+          sheets = db.xquery(<<~QUERY, event['id']).to_a
+            select
+              sheets.id id,
+              'true' as resertved,
+              reservations.reserved_at reserved_at
+            from reservations
+            join sheets on sheets.id = reservations.sheet_id
+            where reservations.event_id = ?
+            group by sheets.id
+          QUERY
+          evt[:sheets][rank]['detail'].push(sheets)
 
           obj[event['id']] = evt
         end.values
@@ -297,7 +309,8 @@ module Torb
 
     get '/' do
       @user   = get_login_user
-      @events = get_events.map(&method(:sanitize_event))
+      # @events = get_events.map(&method(:sanitize_event))
+      @events = get_events_for_top
       erb :index
     end
 

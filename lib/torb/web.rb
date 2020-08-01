@@ -60,7 +60,7 @@ module Torb
         begin
           event_ids = db.query('SELECT * FROM events ORDER BY id ASC').select(&where).map { |e| e['id'] }
           events = event_ids.map do |event_id|
-            event = get_event(event_id)
+            event = get_event_for_get_events(event_id)
             event['sheets'].each { |sheet| sheet.delete('detail') }
             event
           end
@@ -70,6 +70,37 @@ module Torb
         end
 
         events
+      end
+
+      def get_event_for_get_events(event_id)
+        event = db.xquery('SELECT * FROM events WHERE id = ?', event_id).first
+        return unless event
+
+        # zero fill
+        event['total']   = 1000
+        event['remains'] = 1000
+        event['sheets'] = {
+          'S' => { 'total' => 50, 'remains' => 50, 'price' => 5000 + event['price'] },
+          'A' => { 'total' => 150, 'remains' => 150 , 'price' => 3000 + event['price'] },
+          'B' => { 'total' => 300, 'remains' => 300, 'price' => 1000 + event['price'] },
+          'C' => { 'total' => 500, 'remains' => 500, 'price' => 0 + event['price'] },
+        }
+        # %w[S A B C].each do |rank|
+        #   event['sheets'][rank] = { 'total' => 0, 'remains' => 0 }
+        # end
+
+        rank_remains = db.xquery('select s.rank, count(*) from sheets as s
+          left join reservations as r on s.id = r.sheet_id and r.event_id = ?
+          where r.reserved_at is not null and r.canceled_at is null group by s.rank', event_id)
+        rank_remains.each do |sheet|
+          event['sheets'][sheet['rank']]['remains'] = event['sheets'][sheet['rank']]['total'] - sheet['count(*)']
+          event['remains'] -= sheet['count(*)']
+        end
+
+        event['public'] = event.delete('public_fg')
+        event['closed'] = event.delete('closed_fg')
+        p event
+        event
       end
 
       def get_event(event_id, login_user_id = nil)

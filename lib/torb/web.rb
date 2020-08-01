@@ -203,7 +203,7 @@ module Torb
 
     get '/' do
       @user   = get_login_user
-      @events = get_events_for_top
+      @events = get_events.map(&method(:sanitize_event))
       erb :index
     end
 

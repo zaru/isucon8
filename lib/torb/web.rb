@@ -401,14 +401,10 @@ module Torb
 
       db.query('BEGIN')
       begin
-        reservation = db.xquery('SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled = 0 GROUP BY event_id HAVING reserved_at = MIN(reserved_at) FOR UPDATE', event['id'], sheet['id']).first
+        reservation = db.xquery('SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? and user_id = ? AND canceled = 0', event['id'], sheet['id'], user['id']).first
         unless reservation
           db.query('ROLLBACK')
           halt_with_error 400, 'not_reserved'
-        end
-        if reservation['user_id'] != user['id']
-          db.query('ROLLBACK')
-          halt_with_error 403, 'not_permitted'
         end
         timestamp = Time.now.utc.strftime('%F %T.%6N')
         db.xquery('UPDATE reservations SET canceled_at = ?, updated_at = ?, canceled = 1 WHERE id = ?', timestamp, timestamp, reservation['id'])

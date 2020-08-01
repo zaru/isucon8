@@ -61,7 +61,6 @@ module Torb
           event_ids = db.query('SELECT * FROM events ORDER BY id ASC').select(&where).map { |e| e['id'] }
           events = event_ids.map do |event_id|
             event = get_event_for_get_events(event_id)
-            event['sheets'].each { |sheet| sheet.delete('detail') }
             event
           end
           db.query('COMMIT')
@@ -162,7 +161,7 @@ module Torb
       end
 
       def validate_rank(rank)
-        db.xquery('SELECT COUNT(*) AS total_sheets FROM sheets WHERE `rank` = ?', rank).first['total_sheets'] > 0
+        ['S', 'A', 'B', 'C'].include?(rank)
       end
 
       def body_params
@@ -503,7 +502,8 @@ module Torb
         db.query('ROLLBACK')
       end
 
-      event = get_event(event_id)
+      event['closed'] = closed
+      event['public'] = public
       event.to_json
     end
 

@@ -90,7 +90,6 @@ module Torb
         sheets = db.query('SELECT * FROM sheets ORDER BY `rank`, num')
         sheets.each do |sheet|
           event['sheets'][sheet['rank']]['price'] ||= event['price'] + sheet['price']
-          event['total'] += 1
           event['sheets'][sheet['rank']]['total'] += 1
 
           reservation = db.xquery('SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled_at IS NULL GROUP BY event_id, sheet_id HAVING reserved_at = MIN(reserved_at)', event['id'], sheet['id']).first
@@ -110,6 +109,7 @@ module Torb
           sheet.delete('rank')
         end
 
+        event['total'] = 1000
         event['public'] = event.delete('public_fg')
         event['closed'] = event.delete('closed_fg')
 

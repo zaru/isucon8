@@ -4,6 +4,7 @@ require 'erubi'
 require 'mysql2'
 require 'mysql2-cs-bind'
 require 'rack-mini-profiler'
+require 'digest/sha2'
 
 module Torb
   SHEET_CAPACITY = 1000
@@ -319,7 +320,8 @@ module Torb
           halt_with_error 409, 'duplicated'
         end
 
-        db.xquery('INSERT INTO users (login_name, pass_hash, nickname) VALUES (?, SHA2(?, 256), ?)', login_name, password, nickname)
+        pass_hash = Digest::SHA256.hexdigest(password)
+        db.xquery('INSERT INTO users (login_name, pass_hash, nickname) VALUES (?, ?, ?)', login_name, pass_hash, nickname)
         user_id = db.last_id
         db.query('COMMIT')
       rescue => e
@@ -376,9 +378,9 @@ module Torb
       login_name = body_params['login_name']
       password   = body_params['password']
 
-      user      = db.xquery('SELECT * FROM users WHERE login_name = ?', login_name).first
-      pass_hash = db.xquery('SELECT SHA2(?, 256) AS pass_hash', password).first['pass_hash']
-      halt_with_error 401, 'authentication_failed' if user.nil? || pass_hash != user['pass_hash']
+      pass_hash = Digest::SHA256.hexdigest(password)
+      user      = db.xquery('SELECT * FROM users WHERE login_name = ? and pass_hash = ?', login_name, pass_hash).first
+      halt_with_error 401, 'authentication_failed' if user.nil?
 
       session['user_id'] = user['id']
 

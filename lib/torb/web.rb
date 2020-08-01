@@ -182,9 +182,9 @@ module Torb
           events.price + 3000 as a_price,
           events.price + 1000 as b_price,
           events.price +    0 as c_price,
-          (select count(*) from sheets
-             join reservations on sheets.id = reservations.sheet_id and canceled_at is null = 1
-             where events.id = reservations.event_id
+          (select count(*) from  reservations
+            where canceled_at is null = 1
+              and events.id = reservations.event_id
           ) as reserved_count
           from events
           where events.public_fg = 1

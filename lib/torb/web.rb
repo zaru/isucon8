@@ -68,6 +68,25 @@ module Torb
         )
       end
 
+      def get_events_for_admin(where = nil)
+        where ||= ->(e) { e['public_fg'] }
+
+        db.query('BEGIN')
+        begin
+          event_ids = db.query('SELECT * FROM events ORDER BY id ASC').select(&where).map { |e| e['id'] }
+          events = event_ids.map do |event_id|
+            event = get_event_default(event_id)
+            event['sheets'].each { |sheet| sheet.delete('detail') }
+            event
+          end
+          db.query('COMMIT')
+        rescue
+          db.query('ROLLBACK')
+        end
+
+        events
+      end
+
       def get_events(where = nil)
         where ||= ->(e) { e['public_fg'] }
 
@@ -139,7 +158,7 @@ module Torb
       end
 
 
-      def get_event_for_delete(event_id, login_user_id = nil)
+      def get_event_default(event_id, login_user_id = nil)
         event = db.xquery('SELECT * FROM events WHERE id = ?', event_id).first
         return unless event
 
@@ -419,7 +438,7 @@ module Torb
 
     delete '/api/events/:id/sheets/:rank/:num/reservation', login_required: true do |event_id, rank, num|
       user  = get_login_user
-      event = get_event_for_delete(event_id, user['id'])
+      event = get_event_default(event_id, user['id'])
       halt_with_error 404, 'invalid_event' unless event && event['public']
       halt_with_error 404, 'invalid_rank'  unless validate_rank(rank)
 

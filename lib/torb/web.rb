@@ -471,7 +471,7 @@ module Torb
 
     get '/admin/' do
       @administrator = get_login_administrator
-      @events = get_events(->(_) { true }) if @administrator
+      @events = get_events_for_admin(->(_) { true }) if @administrator
 
       erb :admin
     end

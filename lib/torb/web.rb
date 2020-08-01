@@ -91,7 +91,7 @@ module Torb
 
         rank_remains = db.xquery('select s.rank, count(*) from sheets as s
           left join reservations as r on s.id = r.sheet_id and r.event_id = ?
-          where r.reserved_at is not null and r.canceled_at is null group by s.rank', event_id)
+          where r.reserved_at is not null and r.canceled = 0 group by s.rank', event_id)
         rank_remains.each do |sheet|
           event['sheets'][sheet['rank']]['remains'] = event['sheets'][sheet['rank']]['total'] - sheet['count(*)']
           event['remains'] -= sheet['count(*)']
@@ -115,7 +115,7 @@ module Torb
         end
 
         sheets_with_res = db.xquery('select s.rank, s.num, s.price, r.user_id, r.reserved_at
-          from sheets as s left join reservations as r on s.id = r.sheet_id and r.event_id = ? and r.canceled_at is null
+          from sheets as s left join reservations as r on s.id = r.sheet_id and r.event_id = ? and r.canceled = 0
           ', event_id)
         sheets_with_res.each do |sheet|
           event['sheets'][sheet['rank']]['price'] ||= event['price'] + sheet['price']
@@ -257,7 +257,7 @@ module Torb
       end
 
       user['recent_reservations'] = recent_reservations
-      user['total_price'] = db.xquery('SELECT IFNULL(SUM(e.price + s.price), 0) AS total_price FROM reservations r INNER JOIN sheets s ON s.id = r.sheet_id INNER JOIN events e ON e.id = r.event_id WHERE r.user_id = ? AND r.canceled_at IS NULL', user['id']).first['total_price']
+      user['total_price'] = db.xquery('SELECT IFNULL(SUM(e.price + s.price), 0) AS total_price FROM reservations r INNER JOIN sheets s ON s.id = r.sheet_id INNER JOIN events e ON e.id = r.event_id WHERE r.user_id = ? AND r.canceled = 0', user['id']).first['total_price']
 
       rows = db.xquery('SELECT event_id FROM reservations WHERE user_id = ? GROUP BY event_id ORDER BY MAX(updated_at) DESC LIMIT 5', user['id'])
       recent_events = rows.map do |row|
@@ -315,7 +315,7 @@ module Torb
       sheet = nil
       reservation_id = nil
       loop do
-        sheet = db.xquery('SELECT * FROM sheets WHERE id NOT IN (SELECT sheet_id FROM reservations WHERE event_id = ? AND canceled_at IS NULL FOR UPDATE) AND `rank` = ? ORDER BY RAND() LIMIT 1', event['id'], rank).first
+        sheet = db.xquery('SELECT * FROM sheets WHERE id NOT IN (SELECT sheet_id FROM reservations WHERE event_id = ? AND canceled = 0 FOR UPDATE) AND `rank` = ? ORDER BY RAND() LIMIT 1', event['id'], rank).first
         halt_with_error 409, 'sold_out' unless sheet
         db.query('BEGIN')
         begin
@@ -347,7 +347,7 @@ module Torb
 
       db.query('BEGIN')
       begin
-        reservation = db.xquery('SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled_at IS NULL GROUP BY event_id HAVING reserved_at = MIN(reserved_at) FOR UPDATE', event['id'], sheet['id']).first
+        reservation = db.xquery('SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled = 0 GROUP BY event_id HAVING reserved_at = MIN(reserved_at) FOR UPDATE', event['id'], sheet['id']).first
         unless reservation
           db.query('ROLLBACK')
           halt_with_error 400, 'not_reserved'
@@ -357,7 +357,7 @@ module Torb
           halt_with_error 403, 'not_permitted'
         end
         timestamp = Time.now.utc.strftime('%F %T.%6N')
-        db.xquery('UPDATE reservations SET canceled_at = ?, updated_at = ? WHERE id = ?', timestamp, timestamp, reservation['id'])
+        db.xquery('UPDATE reservations SET canceled_at = ?, updated_at = ?, canceled = 1 WHERE id = ?', timestamp, timestamp, reservation['id'])
         db.query('COMMIT')
       rescue => e
         warn "rollback by: #{e}"

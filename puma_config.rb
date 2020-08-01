@@ -3,5 +3,5 @@ daemonize true
 preload_app!
 
 workers 2
-threads_count 16, 16
+threads 16, 16
 

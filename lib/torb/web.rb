@@ -116,12 +116,44 @@ module Torb
         event
       end
 
+
       def sanitize_event(event)
         sanitized = event.dup  # shallow clone
         sanitized.delete('price')
         sanitized.delete('public')
         sanitized.delete('closed')
         sanitized
+      end
+
+      def get_events_for_top
+        events = db.xquery(<<~QUERY)
+          SELECT
+          events.title event_title,
+          events.price + 5000 as s_price,
+          events.price + 3000 as a_price,
+          events.price + 1000 as b_price,
+          events.price +    0 as c_price,
+          (select count(*) from  reservations
+            where canceled_at is null
+              and events.id = reservations.event_id
+          ) as reserved_count
+          from events
+          where events.public_fg = 1
+        QUERY
+
+        events.map do |event|
+          {
+            title: event['event_title'],
+            total: Torb::SHEET_CAPACITY,
+            remains: Torb::SHEET_CAPACITY - event['reserved_count'].to_i,
+            sheets: {
+              'S' => { 'price' => event['s_price'] },
+              'A' => { 'price' => event['a_price'] },
+              'B' => { 'price' => event['b_price'] },
+              'C' => { 'price' => event['c_price'] }
+            }
+          }
+        end
       end
 
       def get_login_user
@@ -169,7 +201,7 @@ module Torb
 
     get '/' do
       @user   = get_login_user
-      @events = get_events.map(&method(:sanitize_event))
+      @events = get_events_for_top
       erb :index
     end
 

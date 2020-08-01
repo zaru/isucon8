@@ -8,6 +8,16 @@ require 'digest/sha2'
 
 module Torb
   SHEET_CAPACITY = 1000
+  SHEET_S = 50
+  SHEET_A = 150
+  SHEET_B = 300
+  SHEET_C = 500
+  BASE_PRICE_FOR_SHEET = {
+    'S' => 5000,
+    'A' => 3000,
+    'B' => 1000,
+    'C' => 0,
+  }.freeze
 
   class Web < Sinatra::Base
     configure :development do
@@ -131,34 +141,46 @@ module Torb
       def get_events_for_top
         events = db.xquery(<<~QUERY)
           SELECT
-          events.id id,
-          events.title event_title,
-          events.price + 5000 as s_price,
-          events.price + 3000 as a_price,
-          events.price + 1000 as b_price,
-          events.price +    0 as c_price,
-          (select count(*) from  reservations
-            where canceled_at is null
-              and events.id = reservations.event_id
-          ) as reserved_count
+            events.id id,
+            events.title event_title,
+            events.price price,
+            sheets.rank rank,
+            count(*) reserved_count
           from events
-          where events.public_fg = 1
+          join reservations on events.id = reservations.event_id and canceled_at is null
+          join sheets on sheets.id = reservations.sheet_id
+          where events.id = reservations.event_id
+          and events.public_fg = 1
+          group by events.id, sheets.rank
         QUERY
 
-        events.map do |event|
-          {
+        #
+        # obj = {
+        #   1: {
+        #     id: event['id']
+        #   }
+        # }
+        events.each_with_object({}) do |event, obj|
+          rank = event['rank']
+          evt = obj.fetch(event['id'], {
             id: event['id'],
             title: event['event_title'],
             total: Torb::SHEET_CAPACITY,
-            remains: Torb::SHEET_CAPACITY - event['reserved_count'].to_i,
+            remains: Torb::SHEET_CAPACITY,
             sheets: {
-              'S' => { 'price' => event['s_price'] },
-              'A' => { 'price' => event['a_price'] },
-              'B' => { 'price' => event['b_price'] },
-              'C' => { 'price' => event['c_price'] }
+              'S' => { 'total' => Torb::SHEET_S, 'remains' => Torb::SHEET_S, 'price' => event['price'] + Torb::BASE_PRICE_FOR_SHEET['S'] },
+              'A' => { 'total' => Torb::SHEET_A, 'remains' => Torb::SHEET_A, 'price' => event['price'] + Torb::BASE_PRICE_FOR_SHEET['A'] },
+              'B' => { 'total' => Torb::SHEET_B, 'remains' => Torb::SHEET_B, 'price' => event['price'] + Torb::BASE_PRICE_FOR_SHEET['B'] },
+              'C' => { 'total' => Torb::SHEET_C, 'remains' => Torb::SHEET_C, 'price' => event['price'] + Torb::BASE_PRICE_FOR_SHEET['C'] }
             }
-          }
-        end
+          })
+
+          reserved_count = event['reserved_count'].to_i
+          evt[:remains] -= reserved_count
+          evt[:sheets][rank]['remains'] -= reserved_count
+
+          obj[event['id']] = evt
+        end.values
       end
 
       def get_login_user
@@ -204,7 +226,7 @@ module Torb
 
     get '/' do
       @user   = get_login_user
-      @events = get_events.map(&method(:sanitize_event))
+      @events = get_events_for_top
       erb :index
     end
 

@@ -6,6 +6,8 @@ require 'mysql2-cs-bind'
 require 'rack-mini-profiler'
 
 module Torb
+  SHEET_CAPACITY = 1_000
+
   class Web < Sinatra::Base
     configure :development do
       require 'sinatra/reloader'
@@ -79,6 +81,20 @@ module Torb
         event = db.xquery('SELECT * FROM events WHERE id = ?', event_id).first
         return unless event
 
+        # event = {
+        #   'total' => 0,
+        #   'remains' => 0,
+        #   'sheets' => {
+        #     'S' => { 'total' => 0, 'remains' => 0, 'detail' => [] },
+        #     'A' => { 'total' => 0, 'remains' => 0, 'detail' => [] },
+        #     'B' => { 'total' => 0, 'remains' => 0, 'detail' => [] },
+        #     'C' => { 'total' => 0, 'remains' => 0, 'detail' => [] },
+        #   }
+        # }
+        #
+        # sheets = {
+        # }
+
         # zero fill
         event['total']   = 0
         event['remains'] = 0
@@ -87,21 +103,53 @@ module Torb
           event['sheets'][rank] = { 'total' => 0, 'remains' => 0, 'detail' => [] }
         end
 
+        # sheets = {
+        #   'mine' => true,
+        #   'reserved' => true
+        #   'reserved_at' => '2020/01/01 01-01-01'
+        # }
         sheets = db.query('SELECT * FROM sheets ORDER BY `rank`, num')
         sheets.each do |sheet|
+
+          # event = {
+          #   'total' => 1,
+          #   'remains' => 0,
+          #   'sheets' => {
+          #     'S' => { 'total' => 1, 'remains' => 0, 'detail' => [], 'price' => 1 },
           event['sheets'][sheet['rank']]['price'] ||= event['price'] + sheet['price']
           event['sheets'][sheet['rank']]['total'] += 1
 
-          reservation = db.xquery('SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled_at IS NULL GROUP BY event_id, sheet_id HAVING reserved_at = MIN(reserved_at)', event['id'], sheet['id']).first
-          if reservation
+          # reservation = db.xquery('SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled = 0 GROUP BY event_id, sheet_id HAVING reserved_at = MIN(reserved_at)', event['id'], sheet['id']).first
+          reservation = db.xquery(<<~SQL, event['id'], sheet['id']).first
+            SELECT * FROM reservations
+            WHERE event_id = ?
+              AND sheet_id = ?
+              AND canceled_at IS NULL
+            GROUP BY event_id, sheet_id
+            HAVING reserved_at = MIN(reserved_at)
+          SQL
+
+          if reservation # 予約があるとき
+            # sheet = {
+            #   'mine' => true,
+            #   'reserved' => true
+            #   'reserved_at' => '2020/01/01 01-01-01'
+            # }
             sheet['mine']        = true if login_user_id && reservation['user_id'] == login_user_id
             sheet['reserved']    = true
             sheet['reserved_at'] = reservation['reserved_at'].to_i
-          else
+          else # 予約がないとき
+            # event = {
+            #   'remains' => 1,
+            #   'sheets' => {
+            #     'S' => { 'total' => 1, 'remains' => 1, 'detail' => [], 'price' => 1 },
             event['remains'] += 1
             event['sheets'][sheet['rank']]['remains'] += 1
           end
 
+          # event = {
+          #   'sheets' => {
+          #     'S' => { 'total' => 1, 'remains' => 0, 'detail' => [ { sheet }, { sheet }, ... ], 'price' => 1 },
           event['sheets'][sheet['rank']]['detail'].push(sheet)
 
           sheet.delete('id')
@@ -113,7 +161,48 @@ module Torb
         event['public'] = event.delete('public_fg')
         event['closed'] = event.delete('closed_fg')
 
+        # event = {
+        #   'total' => 0,
+        #   'remains' => 0,
+        #   'sheets' => {
+        #     'S' => { 'total' => 0, 'remains' => 0, 'detail' => [ { sheet }, { sheet }, ...], 'price' => 1000 },
+        #     'A' => { 'total' => 0, 'remains' => 0, 'detail' => [ { sheet }, { sheet }, ...], 'price' => 1000 },
+        #     'B' => { 'total' => 0, 'remains' => 0, 'detail' => [ { sheet }, { sheet }, ...], 'price' => 1000 },
+        #     'C' => { 'total' => 0, 'remains' => 0, 'detail' => [ { sheet }, { sheet }, ...], 'price' => 1000 },
+        #   }
+        # }
         event
+      end
+
+      def get_events_for_top
+        events = db.xquery(<<~QUERY)
+          SELECT
+          events.title event_title,
+          events.price + 5000 as s_price,
+          events.price + 3000 as a_price,
+          events.price + 1000 as b_price,
+          events.price +    0 as c_price,
+          (select count(*) from  reservations
+            where canceled_at is null
+              and events.id = reservations.event_id
+          ) as reserved_count
+          from events
+          where events.public_fg = 1
+        QUERY
+
+        events.map do |event|
+          {
+            title: event['event_title'],
+            total: Torb::SHEET_CAPACITY,
+            remains: Torb::SHEET_CAPACITY - event['reserved_count'].to_i,
+            sheets: {
+              'S' => { 'price' => event['s_price'] },
+              'A' => { 'price' => event['a_price'] },
+              'B' => { 'price' => event['b_price'] },
+              'C' => { 'price' => event['c_price'] }
+            }
+          }
+        end
       end
 
       def sanitize_event(event)
@@ -169,7 +258,7 @@ module Torb
 
     get '/' do
       @user   = get_login_user
-      @events = get_events.map(&method(:sanitize_event))
+      @events = get_events_for_top
       erb :index
     end
 
@@ -263,6 +352,7 @@ module Torb
       status 204
     end
 
+    # 呼ばれてない？
     get '/api/events' do
       events = get_events.map(&method(:sanitize_event))
       events.to_json

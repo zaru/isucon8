@@ -312,12 +312,53 @@ module Torb
       events.to_json
     end
 
+
+    def get_event_for_event_detail(event_id, login_user_id = nil)
+      event = db.xquery('SELECT * FROM events WHERE id = ?', event_id).first
+      return unless event
+
+      # zero fill
+      event['total']   = 0
+      event['remains'] = 0
+      event['sheets'] = {}
+      %w[S A B C].each do |rank|
+        event['sheets'][rank] = { 'total' => 0, 'remains' => 0, 'detail' => [] }
+      end
+
+      sheets_with_res = db.xquery('select s.rank, s.num, s.price, r.user_id, r.reserved_at
+          from sheets as s left join reservations as r on s.id = r.sheet_id and r.event_id = ? and r.canceled = 0
+          ', event_id)
+      sheets_with_res.each do |sheet|
+        event['sheets'][sheet['rank']]['price'] ||= event['price'] + sheet['price']
+        event['total'] += 1
+        event['sheets'][sheet['rank']]['total'] += 1
+        if sheet['reserved_at']
+          sheet['mine']        = true if login_user_id && sheet['user_id'] == login_user_id
+          sheet['reserved']    = true
+          sheet['reserved_at'] = sheet['reserved_at'].to_i
+        else
+          event['remains'] += 1
+          event['sheets'][sheet['rank']]['remains'] += 1
+        end
+
+        event['sheets'][sheet['rank']]['detail'].push(sheet)
+
+        sheet.delete('price')
+        sheet.delete('rank')
+      end
+
+      event.delete('public_fg')
+      event.delete('closed_fg')
+      event.delete('price')
+
+      event
+    end
+
     get '/api/events/:id' do |event_id|
       user = get_login_user || {}
-      event = get_event(event_id, user['id'])
-      halt_with_error 404, 'not_found' if event.nil? || !event['public']
-
-      event = sanitize_event(event)
+      event = db.xquery('SELECT id FROM events WHERE id = ? and public_fg = 1', event_id).first
+      halt_with_error 404, 'not_found' unless event
+      event = get_event_for_event_detail(event_id, user['id'])
       event.to_json
     end
 

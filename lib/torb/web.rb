@@ -143,6 +143,7 @@ module Torb
 
         events.map do |event|
           {
+            id: event['id'],
             title: event['event_title'],
             total: Torb::SHEET_CAPACITY,
             remains: Torb::SHEET_CAPACITY - event['reserved_count'].to_i,
